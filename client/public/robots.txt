@@ -1,0 +1,16 @@
+# Allow all user agents to crawl the site
+User-agent: *
+Allow: /
+
+# Don't allow crawling of URLs with section parameters to avoid duplicate content
+Disallow: /module/*?section=*
+
+# Don't allow crawling of specific user or admin routes
+Disallow: /account
+Disallow: /admin/
+Disallow: /signin
+Disallow: /forgot-password
+Disallow: /update-password
+
+# Sitemap URL
+Sitemap: https://www.cursorfornoncoders.com/sitemap.xml
