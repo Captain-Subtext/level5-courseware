@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -30,6 +30,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { SEO } from "@/components/SEO";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 
 // Form validation schema
 const loginSchema = z.object({
@@ -63,6 +64,11 @@ export default function SignInPage() {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loginCaptchaToken, setLoginCaptchaToken] = useState<string | null>(null);
+  const [registerCaptchaToken, setRegisterCaptchaToken] = useState<string | null>(null);
+
+  const loginCaptchaRef = useRef<HCaptcha>(null);
+  const registerCaptchaRef = useRef<HCaptcha>(null);
   
   // If user is already logged in, redirect to dashboard or the page they were trying to access
   useEffect(() => {
@@ -74,7 +80,7 @@ export default function SignInPage() {
   
   // Set document title on mount
   useEffect(() => {
-    document.title = 'Sign In | Courseware Platform';
+    document.title = 'Sign In | Cursor for Non-Coders';
   }, []);
   
   // Login form
@@ -99,10 +105,14 @@ export default function SignInPage() {
   // Handle login submission
   const onLoginSubmit = async (values: LoginFormValues) => {
     setAuthError(null);
+    if (!loginCaptchaToken) {
+      setAuthError("Please complete the CAPTCHA.");
+      return;
+    }
     setIsLoading(true);
     
     try {
-      const { error } = await signIn(values.email, values.password);
+      const { error } = await signIn(values.email, values.password, loginCaptchaToken);
       
       if (error) throw error;
       
@@ -112,21 +122,35 @@ export default function SignInPage() {
       setAuthError(error.message || "Invalid email or password. Please try again.");
     } finally {
       setIsLoading(false);
+      loginCaptchaRef.current?.resetCaptcha();
+      setLoginCaptchaToken(null);
     }
   };
 
   // Handle registration submission
   const onRegisterSubmit = async (values: RegisterFormValues) => {
     setAuthError(null);
+    if (!registerCaptchaToken) {
+      setAuthError("Please complete the CAPTCHA.");
+      return;
+    }
     setIsLoading(true);
     
     try {
-      const { error, data } = await signUp(values.email, values.password);
+      const { error, data } = await signUp(values.email, values.password, registerCaptchaToken);
       
       if (error) throw error;
       
-      if (!data?.user?.identities?.length) {
-        setAuthError("Email already registered. Please sign in instead.");
+      // Check if the user object is present and if identities array is empty or undefined
+      // An empty identities array for a new user usually means the email is already taken.
+      // Supabase might return a user object with an empty identities array if email confirmation is off
+      // and the email exists. Or, it might return an error directly depending on exact Supabase settings.
+      // We are making the error message generic here to avoid enumeration.
+      if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
+        // This condition might indicate the email is already registered,
+        // especially if Supabase's email confirmation is turned off or handled implicitly.
+        // Instead of a specific message, use a generic one.
+        setAuthError("Could not create account. If you already have an account, please sign in. Otherwise, please try again or contact support if the issue persists.");
         return;
       }
       
@@ -138,9 +162,12 @@ export default function SignInPage() {
       
     } catch (error: any) {
       console.error("Registration error:", error);
-      setAuthError(error.message || "Could not create account. Please try again.");
+      // Generic error message for other registration failures
+      setAuthError("Could not create account. Please try again or contact support if the issue persists.");
     } finally {
       setIsLoading(false);
+      registerCaptchaRef.current?.resetCaptcha();
+      setRegisterCaptchaToken(null);
     }
   };
 
@@ -148,7 +175,7 @@ export default function SignInPage() {
   const handleSocialLogin = async (provider: 'google' | 'github') => {
     setAuthError(null);
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { data: _data, error } = await supabase.auth.signInWithOAuth({
         provider,
       });
       
@@ -267,6 +294,23 @@ export default function SignInPage() {
                         </FormItem>
                       )}
                     />
+                    
+                    {/* HCaptcha component for login form */}
+                    <div className="my-4">
+                      <HCaptcha
+                        sitekey="YOUR_HCAPTCHA_SITEKEY"
+                        onVerify={(token) => setLoginCaptchaToken(token)}
+                        onError={() => {
+                          setAuthError("CAPTCHA challenge failed. Please try again.");
+                          setLoginCaptchaToken(null);
+                        }}
+                        onExpire={() => {
+                          setAuthError("CAPTCHA challenge expired. Please try again.");
+                          setLoginCaptchaToken(null);
+                        }}
+                        ref={loginCaptchaRef}
+                      />
+                    </div>
                     
                     <Button 
                       type="submit" 
@@ -429,6 +473,23 @@ export default function SignInPage() {
                         </FormItem>
                       )}
                     />
+                    
+                    {/* HCaptcha component for registration form only */}
+                    <div className="my-4"> 
+                      <HCaptcha
+                        sitekey="YOUR_HCAPTCHA_SITEKEY"
+                        onVerify={(token) => setRegisterCaptchaToken(token)}
+                        onError={() => {
+                          setAuthError("CAPTCHA challenge failed. Please try again.");
+                          setRegisterCaptchaToken(null);
+                        }}
+                        onExpire={() => {
+                          setAuthError("CAPTCHA challenge expired. Please try again.");
+                          setRegisterCaptchaToken(null);
+                        }}
+                        ref={registerCaptchaRef}
+                      />
+                    </div>
                     
                     <Button 
                       type="submit" 

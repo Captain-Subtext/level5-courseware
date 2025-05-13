@@ -19,14 +19,19 @@ const isAdmin = async (req: Request, res: Response, next: NextFunction) => {
   const userEmail = req.user?.email;
   
   if (!userEmail) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    // If isAuthenticated passed, req.user should exist. 
+    // This check is more for req.user.email specifically.
+    console.warn('[isAdmin] User object or email missing after isAuthenticated.');
+    return res.status(401).json({ error: 'Unauthorized: User details incomplete.' });
   }
   
   // Hard-coded admin check for simplicity and reliability
-  if (userEmail === process.env.ADMIN_EMAIL) {
+  const adminCheckEmail = process.env.ADMIN_EMAIL || "enjoy@level5.life";
+  if (userEmail === adminCheckEmail) {
     return next();
   }
   
+  console.warn(`[isAdmin] Forbidden: Admin access denied for user: ${userEmail}`);
   return res.status(403).json({ error: 'Forbidden: Admin access required' });
 };
 
@@ -67,7 +72,7 @@ async function recordAdminAction(adminUserId: string, eventType: string, details
  */
 async function verifyAdminCredentials(email: string, secret: string): Promise<boolean> {
   // Use process.env for server-side secrets
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com"; // Use env var or default
+  const adminEmail = process.env.ADMIN_EMAIL || "enjoy@level5.life"; // Use env var or default
   const adminSecret = process.env.ADMIN_SECRET; // Should be set in .env
   
   if (!adminSecret) {
@@ -80,14 +85,8 @@ async function verifyAdminCredentials(email: string, secret: string): Promise<bo
 }
 
 // GET /api/admin/users - Fetch list of all users
-router.get('/users', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
-  // Simpler Admin Check: Use email from authenticated user attached by middleware
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com"; // Use env var or default
-  // Ensure req.user and req.user.email exist (should be guaranteed by isAuthenticated)
-  if (req.user?.email !== adminEmail) {
-    console.warn(`Admin access denied for user: ${req.user?.email}`);
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
-  }
+router.get('/users', isAuthenticated, isAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  // Admin check is now handled by isAdmin middleware, no need for inline check here
   
   try {
     // Fetch users from Supabase Auth Admin API
@@ -186,12 +185,8 @@ router.get('/users', isAuthenticated, async (req: Request, res: Response, next: 
 });
 
 // GET /api/admin/dashboard-metrics - Fetch counts for admin dashboard
-router.get('/dashboard-metrics', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
-  // Verify admin status
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-  if (req.user?.email !== adminEmail) {
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
-  }
+router.get('/dashboard-metrics', isAuthenticated, isAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  // Admin check is now handled by isAdmin middleware
 
   try {
         // 1. Total Users count (Call the dedicated SQL function)
@@ -250,14 +245,15 @@ router.get('/dashboard-metrics', isAuthenticated, async (req: Request, res: Resp
 });
 
 // PUT /api/admin/config/maintenance - Update maintenance mode
-router.put('/config/maintenance', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
-  const adminUserId = req.user?.id; // Get admin user ID from middleware
-  const adminUserEmail = req.user?.email;
+router.put('/config/maintenance', isAuthenticated, isAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  // Admin check is now handled by isAdmin middleware
+  const adminUserId = req.user?.id; // Still needed for logging
+  const adminUserEmail = req.user?.email; // Still needed for logging
 
-  // Verify admin status
-  const adminCheckEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-  if (adminUserEmail !== adminCheckEmail || !adminUserId) {
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  // Ensure adminUserId and adminUserEmail are present after isAdmin middleware (defensive check)
+  if (!adminUserId || !adminUserEmail) {
+    console.error('[PUT /config/maintenance] Admin user ID or email missing after isAdmin middleware.');
+    return res.status(500).json({ error: 'Admin authentication failed unexpectedly.' });
   }
 
   const { enable } = req.body; // Expect { enable: boolean }
@@ -300,14 +296,15 @@ interface AdminBannerConfigRequest {
 }
 
 // PUT /api/admin/config/banner - Update announcement banner settings
-router.put('/config/banner', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
-  const adminUserId = req.user?.id; // Get admin user ID
-  const adminUserEmail = req.user?.email;
+router.put('/config/banner', isAuthenticated, isAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  // Admin check is now handled by isAdmin middleware
+  const adminUserId = req.user?.id; // Still needed for logging
+  const adminUserEmail = req.user?.email; // Still needed for logging
 
-  // Verify admin status
-  const adminCheckEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-  if (adminUserEmail !== adminCheckEmail || !adminUserId) {
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  // Ensure adminUserId and adminUserEmail are present after isAdmin middleware (defensive check)
+  if (!adminUserId || !adminUserEmail) {
+    console.error('[PUT /config/banner] Admin user ID or email missing after isAdmin middleware.');
+    return res.status(500).json({ error: 'Admin authentication failed unexpectedly.' });
   }
 
   const { enabled, text } = req.body as AdminBannerConfigRequest;
@@ -352,12 +349,15 @@ router.put('/config/banner', isAuthenticated, async (req: Request, res: Response
 });
 
 // GET /api/admin/backup/content - Get content backup JSON
-router.get('/backup/content', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
-  // Verify admin status
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-  if (req.user?.email !== adminEmail) {
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
-  }
+router.get('/backup/content', isAuthenticated, isAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  // Admin check is now handled by isAdmin middleware
+  // Note: req.user.id and req.user.email might be useful here for logging who initiated the backup, if desired.
+  // const adminUserId = req.user?.id;
+  // const adminUserEmail = req.user?.email;
+  // if (adminUserId && adminUserEmail) { 
+  //   console.log(`Admin content backup initiated by: ${adminUserEmail} (${adminUserId})`);
+  //   // recordAdminAction(adminUserId, 'content_backup_downloaded', { triggeredBy: adminUserEmail }, req.ip);
+  // }
 
   try {
     // Call the database function to get the backup data
@@ -477,7 +477,7 @@ router.post('/bulk-email', async (req: Request, res: Response, next: NextFunctio
         const result = await sendContactEmail({
           recipientEmail: email, // Ensure sendContactEmail uses this
           name: "Cursor for Non-Coders",
-          email: process.env.ADMIN_SENDER_EMAIL || "admin@example.com", // Use configured sender
+          email: process.env.ADMIN_SENDER_EMAIL || "enjoy@level5.life", // Use configured sender
           subject: subject,
           message: message // Ensure message is formatted appropriately (HTML?)
         });
@@ -509,14 +509,15 @@ interface AdminSettingsUpdateRequest {
 }
 
 // PUT /api/admin/config/settings - Update multiple general settings
-router.put('/config/settings', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
-  const adminUserId = req.user?.id;
-  const adminUserEmail = req.user?.email;
+router.put('/config/settings', isAuthenticated, isAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  // Admin check is now handled by isAdmin middleware
+  const adminUserId = req.user?.id; // Still needed for logging
+  const adminUserEmail = req.user?.email; // Still needed for logging
 
-  // Verify admin status
-  const adminCheckEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-  if (adminUserEmail !== adminCheckEmail || !adminUserId) {
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  // Ensure adminUserId and adminUserEmail are present after isAdmin middleware (defensive check)
+  if (!adminUserId || !adminUserEmail) {
+    console.error('[PUT /config/settings] Admin user ID or email missing after isAdmin middleware.');
+    return res.status(500).json({ error: 'Admin authentication failed unexpectedly.' });
   }
 
   const { settings } = req.body as AdminSettingsUpdateRequest;
@@ -591,16 +592,17 @@ router.put('/config/settings', isAuthenticated, async (req: Request, res: Respon
 // --- END NEW GENERIC SETTINGS ENDPOINT ---
 
 // POST /api/admin/users/:userId/grant-monthly - Manually grant a monthly subscription
-router.post('/users/:userId/grant-monthly', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
-  const adminUserId = req.user?.id; // Get admin user ID for logging
-  const adminUserEmail = req.user?.email;
+router.post('/users/:userId/grant-monthly', isAuthenticated, isAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  // Admin check is now handled by isAdmin middleware
+  const adminUserId = req.user?.id; // Still needed for logging
+  const adminUserEmail = req.user?.email; // Still needed for logging
   const targetUserId = req.params.userId;
   const manualSubscriptionId = `manual_${targetUserId}`; // Generate unique manual ID
 
-  // Verify admin status
-  const adminCheckEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-  if (adminUserEmail !== adminCheckEmail || !adminUserId) {
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  // Ensure adminUserId and adminUserEmail are present after isAdmin middleware (defensive check)
+  if (!adminUserId || !adminUserEmail) {
+    console.error('[POST /users/:userId/grant-monthly] Admin user ID or email missing after isAdmin middleware.');
+    return res.status(500).json({ error: 'Admin authentication failed unexpectedly.' });
   }
 
   if (!targetUserId) {
@@ -724,16 +726,17 @@ router.post('/users/:userId/grant-monthly', isAuthenticated, async (req: Request
 });
 
 // POST /api/admin/users/:userId/revoke-monthly - Manually revoke (cancel) a monthly subscription
-router.post('/users/:userId/revoke-monthly', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
-  const adminUserId = req.user?.id;
-  const adminUserEmail = req.user?.email;
+router.post('/users/:userId/revoke-monthly', isAuthenticated, isAdmin, async (req: Request, res: Response, next: NextFunction) => {
+  // Admin check is now handled by isAdmin middleware
+  const adminUserId = req.user?.id; // Still needed for logging
+  const adminUserEmail = req.user?.email; // Still needed for logging
   const targetUserId = req.params.userId;
   const manualSubscriptionId = `manual_${targetUserId}`; // Generate unique manual ID to find
 
-  // Verify admin status
-  const adminCheckEmail = process.env.ADMIN_EMAIL || "admin@example.com";
-  if (adminUserEmail !== adminCheckEmail || !adminUserId) {
-    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  // Ensure adminUserId and adminUserEmail are present after isAdmin middleware (defensive check)
+  if (!adminUserId || !adminUserEmail) {
+    console.error('[POST /users/:userId/revoke-monthly] Admin user ID or email missing after isAdmin middleware.');
+    return res.status(500).json({ error: 'Admin authentication failed unexpectedly.' });
   }
 
   if (!targetUserId) {

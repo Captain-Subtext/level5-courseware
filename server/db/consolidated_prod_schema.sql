@@ -394,7 +394,7 @@ AS $function$
   SELECT m.*
   FROM modules m
   LEFT JOIN matched_sections ms ON m.id = ms.module_id
-  WHERE 
+  WHERE
     m.title ILIKE '%' || search_term || '%'
     OR m.description ILIKE '%' || search_term || '%'
     OR ms.module_id IS NOT NULL

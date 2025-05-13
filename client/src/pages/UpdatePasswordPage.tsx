@@ -22,7 +22,7 @@ export default function UpdatePasswordPage() {
 
   useEffect(() => {
     // Set document title
-    document.title = "Update Password | Courseware Platform";
+    document.title = "Update Password | Cursor for Non-Coders";
     // Log the URL hash immediately on mount
     console.log(`[UpdatePasswordPage] Initial location hash: ${location.hash}`);
 
@@ -71,29 +71,53 @@ export default function UpdatePasswordPage() {
       return;
     }
     
-    // Add password strength check if desired
     if (password.length < 8) {
       setMessage({ type: 'error', text: "Password must be at least 8 characters long." });
       return;
     }
 
     setLoading(true);
-    setMessage(null); // Clear previous messages
+    setMessage(null); 
     setErrorFromUrl(null);
 
-    // The session should have been set automatically by Supabase handling the URL fragment
-    const { data, error } = await supabase.auth.updateUser({
-      password: password,
-    });
+    try {
+      const { data: _data, error } = await supabase.auth.updateUser({
+        password: password,
+      });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (error) {
-      setMessage({ type: 'error', text: error.message });
-    } else {
-      setMessage({ type: 'success', text: "Password updated successfully! You can now sign in." });
-      setPassword('');
-      setConfirmPassword('');
+      if (error) {
+        console.error("[UpdatePasswordPage] Error updating password:", error); // Detailed log for developers
+        
+        let userFriendlyMessage = "An unexpected error occurred while updating your password. Please try again or contact support.";
+        
+        // Example of mapping specific Supabase error messages
+        if (error.message.includes("Password should be at least 6 characters")) {
+          userFriendlyMessage = "Password is too short. It must be at least 8 characters long.";
+        } else if (error.message.toLowerCase().includes("new password should be different")) {
+          userFriendlyMessage = "Your new password must be different from your old password.";
+        } else if (error.message.toLowerCase().includes("user not found")) {
+          userFriendlyMessage = "Could not update password. User session may have expired. Please try requesting a new password reset link.";
+        }
+
+        setMessage({ type: 'error', text: userFriendlyMessage });
+      } else {
+        // 'data' from supabase.auth.updateUser is not used, prefix with _data if necessary based on lint rules, but here we just don't use it.
+        // Success: Navigate to sign-in page with a success message
+        setPassword('');
+        setConfirmPassword('');
+        // No need to set local message here as we are navigating
+        navigate('/signin', { 
+          replace: true, 
+          state: { message: "Password updated successfully! You can now sign in." } 
+        });
+      }
+    } catch (err) {
+      // Catch any other unexpected errors during the async operation (e.g., network issues not caught by Supabase client)
+      setLoading(false);
+      console.error("[UpdatePasswordPage] Unexpected exception during password update:", err);
+      setMessage({ type: 'error', text: "An unexpected error occurred. Please check your connection and try again." });
     }
   };
 

@@ -39,16 +39,16 @@ type AuthContextType = {
   isInMaintenanceMode: boolean;
   announcementBannerEnabled: boolean;
   announcementBannerText: string;
-  signIn: (email: string, password: string) => Promise<{
+  signIn: (email: string, password: string, captchaToken?: string) => Promise<{
     error: AuthError | null;
     data: { session: Session | null; user: User | null } | null;
   }>;
-  signUp: (email: string, password: string) => Promise<{
+  signUp: (email: string, password: string, captchaToken?: string) => Promise<{
     error: AuthError | null;
     data: { session: Session | null; user: User | null } | null;
   }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{
+  resetPassword: (email: string, captchaToken?: string) => Promise<{
     error: AuthError | null;
     data: {} | null;
   }>;
@@ -65,6 +65,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const failedLoginAttempts = new Map<string, { count: number, lastAttempt: number }>();
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+// Define the redirect URL for after the user clicks the email link in password reset
+// This should match the URL used in ForgotPasswordPage.tsx and your Supabase Auth settings
+const UPDATE_PASSWORD_URL = `${typeof window !== 'undefined' ? window.location.origin : ''}/update-password`;
 
 // --- AuthProvider Component ---
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -132,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(newSession);
     setUser(currentUser);
     setIsEmailVerified(currentUser?.email_confirmed_at != null);
-    const adminEmail = 'admin@example.com'; // Ensure this is correct
+    const adminEmail = 'enjoy@level5.life'; // Ensure this is correct
     const isAdminUser = currentUser?.email === adminEmail;
     // console.log('🔐 [AuthProvider] User email:', currentUser?.email);
     // console.log('🔐 [AuthProvider] Is admin:', isAdminUser);
@@ -202,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // --- Auth Actions (Memoized with useCallback) ---
   // SignIn, SignUp, SignOut, ResetPassword, SendVerificationEmail, ClearAuthLocally remain unchanged...
   // (Code for these functions omitted for brevity, paste them back in from your original file)
-   const signIn = useCallback(async (email: string, password: string) => {
+   const signIn = useCallback(async (email: string, password: string, captchaToken?: string) => {
     // Lockout logic remains the same...
     const attemptInfo = failedLoginAttempts.get(email);
     const now = Date.now();
@@ -215,7 +219,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     // setIsLoading(true); // Optional: Add loading state specific to sign-in action?
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      // Pass captchaToken in options if it exists
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+        options: {
+          ...(captchaToken && { captchaToken }),
+        },
+      });
 
       if (error) {
         // Update failed attempts count
@@ -236,11 +247,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // Empty dependency array for signIn
 
 
-  const signUp = useCallback(async (email: string, password: string) => {
+  const signUp = useCallback(async (email: string, password: string, captchaToken?: string) => {
     // setIsLoading(true); // Optional loading state
     try {
-      // Add options if needed, e.g., email redirect URL
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      // Pass captchaToken in options if it exists
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          ...(captchaToken && { captchaToken }),
+          // emailRedirectTo: 'YOUR_REDIRECT_URL', // Keep if you have this for email confirmation
+        },
+      });
       
       // If signup was successful, sync the user with Brevo
       if (data?.user && !error) {
@@ -295,11 +313,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []); // Empty dependency array for signOut
 
 
-  const resetPassword = useCallback(async (email: string) => {
+  const resetPassword = useCallback(async (email: string, captchaToken?: string) => {
     try {
-      // Add options like redirectTo if needed
+      // Pass captchaToken in options if it exists
       const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-        // redirectTo: 'YOUR_PASSWORD_RESET_URL' // IMPORTANT: Configure this
+        redirectTo: UPDATE_PASSWORD_URL,
+        ...(captchaToken && { captchaToken }),
       });
       return { data, error };
     } catch (error) {

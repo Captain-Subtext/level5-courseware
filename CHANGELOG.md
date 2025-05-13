@@ -1,6 +1,17 @@
 # Changelog
 
-All notable changes to the Cursor Learning Platform will be documented in this file.
+All notable changes to the Courseware Platform will be documented in this file.
+
+## [1.0.14] - YYYY-MM-DD 
+
+### Security
+- **STRIDE Mitigations & Hardening:**
+  - User Registration: Implemented generic error messages to prevent user enumeration (Addresses Spoofing, Information Disclosure).
+  - Password Reset UI: Updated `UpdatePasswordPage.tsx` to display user-friendly error messages and log detailed Supabase errors, preventing direct exposure of backend errors (Addresses Information Disclosure).
+  - Rate Limiting: Added server-side in-memory rate limiting to the authenticated user password change endpoint (`PUT /api/user/password`) to protect against brute-force attempts (Addresses Denial of Service).
+  - Admin Authorization: Refactored multiple admin-specific API routes in `server/api/admin.ts` (e.g., user management, content backup, configuration) to consistently use the centralized `isAdmin` middleware, ensuring robust privilege checks (Addresses Elevation of Privilege).
+  - Password Reset Flow: Corrected the `redirectTo` URL in the `resetPassword` function in `client/src/lib/auth.tsx` to consistently point to `/update-password`, aligning with `ForgotPasswordPage.tsx`.
+  - CAPTCHA: Integrated `hCaptcha` into the 'SignInPage.tsx' and `ForgotPasswordPage.tsx` to provide protection against automated requests and potential email bombing (Addresses Denial of Service).  Requires enabling hcaptcha in Supabase and adding the secret key to Supabase and the sitekey to these files.
 
 ## [1.0.13] - 2025-05-06
 

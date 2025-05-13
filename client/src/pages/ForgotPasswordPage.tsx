@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Link } from 'react-router-dom';
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from '@/lib/auth';
+import HCaptcha from '@hcaptcha/react-hcaptcha';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,15 +23,21 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha>(null);
 
   const handlePasswordReset = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setLoading(true);
     setMessage(null);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: UPDATE_PASSWORD_URL,
-    });
+    if (!captchaToken) {
+      setMessage({ type: 'error', text: 'Please complete the CAPTCHA.' });
+      return;
+    }
+
+    setLoading(true);
+
+    const { error } = await resetPassword(email, captchaToken);
 
     if (error) {
       console.error('Error sending password reset email:', error);
@@ -40,11 +47,13 @@ export default function ForgotPasswordPage() {
       setEmail(''); // Clear email field on success
     }
     setLoading(false);
+    captchaRef.current?.resetCaptcha();
+    setCaptchaToken(null);
   };
 
   // Set document title
   useEffect(() => {
-    document.title = "Forgot Password | Courseware Platform";
+    document.title = "Forgot Password | Cursor for Non-Coders";
   }, []);
 
   return (
@@ -70,6 +79,22 @@ export default function ForgotPasswordPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
+                />
+              </div>
+
+              <div className="my-4">
+                <HCaptcha
+                  sitekey="YOUR_HCAPTCHA_SITEKEY"
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onError={() => {
+                    setMessage({ type: 'error', text: 'CAPTCHA challenge failed. Please try again.' });
+                    setCaptchaToken(null);
+                  }}
+                  onExpire={() => {
+                    setMessage({ type: 'error', text: 'CAPTCHA challenge expired. Please try again.'});
+                    setCaptchaToken(null);
+                  }}
+                  ref={captchaRef}
                 />
               </div>
 

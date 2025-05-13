@@ -12,6 +12,44 @@ const { handleSupabaseError } = require('./error-utils');
 // Import the shared authentication middleware
 const { isAuthenticated } = require('../middleware/auth');
 
+// --- Rate Limiting for Password Update ---
+const passwordUpdateAttempts = new Map<string, { count: number, lastAttemptTime: number }>();
+const MAX_PASSWORD_UPDATE_ATTEMPTS = 5; // Max 5 attempts
+const PASSWORD_UPDATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes window
+
+function rateLimitPasswordUpdate(req: Request, res: Response, next: NextFunction) {
+  // @ts-ignore
+  const userId = req.user?.id;
+
+  if (!userId) {
+    // Should be caught by isAuthenticated, but as a safeguard
+    return res.status(401).json({ error: 'User not authenticated for rate limiting.' });
+  }
+
+  const now = Date.now();
+  const userAttempts = passwordUpdateAttempts.get(userId);
+
+  if (userAttempts) {
+    // If window has passed, reset attempts
+    if (now - userAttempts.lastAttemptTime > PASSWORD_UPDATE_WINDOW_MS) {
+      passwordUpdateAttempts.set(userId, { count: 1, lastAttemptTime: now });
+    } else {
+      // If still within window, check attempt count
+      if (userAttempts.count >= MAX_PASSWORD_UPDATE_ATTEMPTS) {
+        console.warn(`Rate limit exceeded for password update by user ${userId}`);
+        return res.status(429).json({ error: 'Too many password update attempts. Please try again later.' });
+      }
+      // Increment attempts
+      userAttempts.count++;
+      userAttempts.lastAttemptTime = now; // Update last attempt time to keep window sliding
+    }
+  } else {
+    // First attempt
+    passwordUpdateAttempts.set(userId, { count: 1, lastAttemptTime: now });
+  }
+  next();
+}
+
 // Define an interface for the shape of data returned by the progress query
 interface ProgressQueryResult {
   section_id: string;
@@ -252,8 +290,8 @@ router.put('/profile', isAuthenticated, async (req: Request, res: Response, next
 });
 
 // PUT /api/user/password
-// Apply shared middleware directly
-router.put('/password', isAuthenticated, async (req: Request, res: Response, next: NextFunction) => {
+// Apply shared middleware directly, then our custom rate limiter
+router.put('/password', isAuthenticated, rateLimitPasswordUpdate, async (req: Request, res: Response, next: NextFunction) => {
   const userId = req.user?.id;
   const { currentPassword, newPassword } = req.body;
 

@@ -14,6 +14,7 @@ The Courseware platform provides a full-featured learning system that can be cus
 - **Subscription Management**: Stripe integration for premium access
 - **Admin Dashboard**: Full control over users, courses, and system settings
 - **Responsive Design**: Works on desktop, tablet, and mobile devices
+- Enhanced Security with hCaptcha: Integration of hCaptcha to protect user registration and password reset functionalities against automated abuse.
 
 ## Technology Stack
 
